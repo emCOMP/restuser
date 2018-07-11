@@ -28,58 +28,28 @@ class UserHandler(web.RequestHandler):
         """Simple (not html) errors"""
         exc = kwargs['exc_info'][1]
         self.write(exc.log_message or str(error))
-    
-    def new_user(self, name):
-        """Create a new user.
-        
-        Return the new user's struct
-        """
-        group = self.settings.get('group', None)
-        shell = self.settings.get('shell', '/bin/bash')
-        skeldir = self.settings.get('skeldir', None)
-        cmd = ['useradd', '-m', '-s', shell]
-        if group:
-            cmd.extend(['-G', group])
-        if skeldir and os.path.exists(skeldir):
-            cmd.extend(['-k', skeldir])
-        cmd.append(name)
-        
-        app_log.info("Running %s", cmd)
-        p = Popen(cmd, stderr=PIPE)
-        _, err = p.communicate()
-        if p.returncode:
-            err = err.decode('utf8', 'replace').strip()
-            raise web.HTTPError(400, err)
-        return self.get_user(name)
-    
-    def post(self, name):
-        user = self.get_user(name)
-        if user is None:
-            user = self.new_user(name)
-        d = {}
-        for attr in ['name', 'dir', 'shell', 'uid', 'gid']:
-            d[attr] = getattr(user, 'pw_' + attr)
-        self.finish(json.dumps(d))
+
+    def get(self, name):
+        obj = self.get_user(name)
+        self.set_header('Content-Type', 'application/json')
+        self.write(json.dumps({
+            'username': obj.pw_name,
+            'uid': obj.pw_uid,
+            'gid': obj.pw_gid
+        })+ "\n")
 
 
 def main():
     define('ip', default=None, help='IP to listen on')
     define('port', default=None, help='port to listen on')
     define('socket', default=None, help='unix socket path to bind (instead of ip:port)')
-    define('group', default='', help='comma separated group list for new users `students,other`')
-    define('skeldir', default='', help='skeleton directory that will be used for new homedirs')
-    define('shell', default='/bin/bash', help='default shell')
     
     parse_command_line()
     
     if not options.socket and not (options.port):
         options.socket = '/var/run/restuser.sock'
     
-    app = web.Application(
-        [(r'/([^/]+)', UserHandler)],
-        group=options.group,
-        skeldir=options.skeldir,
-        shell=options.shell)
+    app = web.Application([(r'/([^/]+)', UserHandler)])
     if options.socket:
         socket = bind_unix_socket(options.socket, mode=0o600)
         server = HTTPServer(app)
