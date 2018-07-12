@@ -17,4 +17,7 @@ RUN pip3 install -r requirements.txt
 
 COPY restuser.py /srv/restuser/
 
-CMD ["python3", "/srv/restuser/restuser.py", "--socket=/var/run/restuser/restuser.sock"]
+ARG PORT=80
+ENV PORT=${PORT}
+
+CMD python3 /srv/restuser/restuser.py --port=${PORT}
